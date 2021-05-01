@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: outdated-image-exporter
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: pod-viewer
+rules:
+  - verbs:
+      - get
+      - watch
+      - list
+    resources:
+      - pods
+    apiGroups:
+      - ""
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: oui-pod-viewer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: pod-viewer
+subjects:
+  - kind: ServiceAccount
+    name: outdated-image-exporter
+    namespace: default

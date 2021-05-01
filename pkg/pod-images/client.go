@@ -20,14 +20,14 @@ const maxRetries = 10
 
 type ConnectionConfig struct {
 	InClusterConfig        bool
-	KubeconfigPath         string
 	InformerResyncInterval time.Duration
 	ImageCheckInterval     time.Duration
 }
 
 type PodImages struct {
-	Name   string
-	Images []string
+	Namespace string
+	Name      string
+	Images    []string
 }
 
 type Callback func(images PodImages) error
@@ -70,13 +70,13 @@ func NewPodClient(config ConnectionConfig) (*PodClient, error) {
 		AddFunc: func(obj interface{}) {
 			key, err := cache.MetaNamespaceKeyFunc(obj)
 			if err == nil {
-				queue.Add(key)
+				queue.AddAfter(key, time.Duration(rand.Int63n(time.Minute.Nanoseconds())))
 			}
 		},
 		DeleteFunc: func(obj interface{}) {
 			key, err := cache.DeletionHandlingMetaNamespaceKeyFunc(obj)
 			if err == nil {
-				queue.Add(key)
+				queue.Forget(key)
 			}
 		},
 	})
@@ -110,13 +110,15 @@ func (p *PodClient) processQueueElement(cb Callback) bool {
 
 	defer p.workqueue.Done(key)
 
-	err := p.processItem(key.(string), cb)
+	queueAgain, err := p.processItem(key.(string), cb)
 
 	if err == nil {
 		p.workqueue.Forget(key)
-		delay := time.Duration(p.config.ImageCheckInterval.Nanoseconds() + rand.Int63n(p.config.ImageCheckInterval.Nanoseconds()/2))
-		log.Printf("enqueuing with delay %v", delay)
-		p.workqueue.AddAfter(key, delay)
+		if queueAgain {
+			delay := time.Duration(p.config.ImageCheckInterval.Nanoseconds() + rand.Int63n(p.config.ImageCheckInterval.Nanoseconds()/2))
+			log.Printf("enqueuing with delay %v", delay)
+			p.workqueue.AddAfter(key, delay)
+		}
 	} else if p.workqueue.NumRequeues(key) < maxRetries {
 		log.Printf("error processing %q, will retry", key)
 		p.workqueue.AddRateLimited(key)
@@ -128,20 +130,20 @@ func (p *PodClient) processQueueElement(cb Callback) bool {
 	return true
 }
 
-func (p *PodClient) processItem(key string, cb Callback) error {
+func (p *PodClient) processItem(key string, cb Callback) (bool, error) {
 	log.Printf("checking pod %q", key)
 	obj, exists, err := p.informer.GetIndexer().GetByKey(key)
 	if err != nil {
-		return err
+		return true, err
 	}
 
 	if !exists {
-		return nil
+		return false, nil
 	}
 
 	pod, ok := obj.(*coreV1.Pod)
 	if !ok {
-		return fmt.Errorf("object is not of type v1/pod: %v", obj)
+		return true, fmt.Errorf("object is not of type v1/pod: %v", obj)
 	}
 
 	var images []string
@@ -150,8 +152,9 @@ func (p *PodClient) processItem(key string, cb Callback) error {
 	}
 
 	err = cb(PodImages{
-		Name:   pod.GetName(),
-		Images: images,
+		Namespace: pod.GetNamespace(),
+		Name:      pod.GetName(),
+		Images:    images,
 	})
-	return err
+	return true, err
 }

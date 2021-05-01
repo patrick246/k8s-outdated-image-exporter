@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: outdated-image-exporter
+  labels:
+    app: outdated-image-exporter
+spec:
+  selector:
+    matchLabels:
+      app: outdated-image-exporter
+  template:
+    metadata:
+      labels:
+        app: outdated-image-exporter
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/scheme: "http"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: exporter
+          image: ghcr.io/patrick246/k8s-outdated-image-exporter:1.0.0
+          readinessProbe:
+            httpGet:
+              port: http
+              path: /ready
+          livenessProbe:
+            tcpSocket:
+              port: http
+          ports:
+            - containerPort: 8080
+              name: http
+          resources:
+            requests:
+              cpu: 50m
+              memory: 50Mi
+            limits:
+              cpu: 100m
+              memory: 100Mi
+      serviceAccountName: outdated-image-exporter
+  replicas: 1
