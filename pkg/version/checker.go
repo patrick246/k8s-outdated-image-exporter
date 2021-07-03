@@ -54,10 +54,13 @@ func (c *Checker) GetDifference(current string, available []string) (major, mino
 	currentSegments := currentParsed.Segments64()
 	if latestSegments[0] > currentSegments[0] {
 		major = latestSegments[0] - currentSegments[0]
+		minor = latestSegments[1]
+		patch = latestSegments[1]
 		return
 	}
 	if latestSegments[1] > currentSegments[1] {
 		minor = latestSegments[1] - currentSegments[1]
+		patch = latestSegments[2]
 		return
 	}
 	if latestSegments[2] > currentSegments[2] {

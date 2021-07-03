@@ -13,6 +13,7 @@ import (
 	"k8s.io/client-go/util/workqueue"
 	"log"
 	"math/rand"
+	"strings"
 	"time"
 )
 
@@ -27,10 +28,10 @@ type ConnectionConfig struct {
 type PodImages struct {
 	Namespace string
 	Name      string
-	Images    []string
+	Images    map[string]string
 }
 
-type Callback func(images PodImages) error
+type Callback func(images PodImages, removed bool) error
 
 type PodClient struct {
 	config    ConnectionConfig
@@ -76,7 +77,7 @@ func NewPodClient(config ConnectionConfig) (*PodClient, error) {
 		DeleteFunc: func(obj interface{}) {
 			key, err := cache.DeletionHandlingMetaNamespaceKeyFunc(obj)
 			if err == nil {
-				queue.Forget(key)
+				queue.Add(key)
 			}
 		},
 	})
@@ -138,7 +139,15 @@ func (p *PodClient) processItem(key string, cb Callback) (bool, error) {
 	}
 
 	if !exists {
-		return false, nil
+		parts := strings.SplitN(key, "/", 2)
+		if len(parts) != 2 {
+			return false, fmt.Errorf("unexpected key format: %s", key)
+		}
+		err := cb(PodImages{
+			Namespace: parts[0],
+			Name:      parts[1],
+		}, true)
+		return false, err
 	}
 
 	pod, ok := obj.(*coreV1.Pod)
@@ -146,15 +155,15 @@ func (p *PodClient) processItem(key string, cb Callback) (bool, error) {
 		return true, fmt.Errorf("object is not of type v1/pod: %v", obj)
 	}
 
-	var images []string
+	images := map[string]string{}
 	for _, container := range pod.Spec.Containers {
-		images = append(images, container.Image)
+		images[container.Name] = container.Image
 	}
 
 	err = cb(PodImages{
 		Namespace: pod.GetNamespace(),
 		Name:      pod.GetName(),
 		Images:    images,
-	})
+	}, false)
 	return true, err
 }

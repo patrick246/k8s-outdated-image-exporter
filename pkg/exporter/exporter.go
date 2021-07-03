@@ -12,7 +12,7 @@ var OutdatedMetric = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 	Name:        "pod_image_outdated",
 	Help:        "Exports how many major, minor or patch versions a image in a podspec is outdated",
 	ConstLabels: nil,
-}, []string{"namespace", "pod", "type"})
+}, []string{"namespace", "pod", "container", "type"})
 
 func init() {
 	prometheus.MustRegister(OutdatedMetric)

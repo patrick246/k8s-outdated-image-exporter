@@ -25,8 +25,27 @@ func NewEvaluator(podClient *pod_images.PodClient, tagLister *tags.TagLister, ve
 }
 
 func (e *Evaluator) Run(ctx context.Context) error {
-	return e.podClient.Listen(ctx, func(pod pod_images.PodImages) error {
-		for _, image := range pod.Images {
+	return e.podClient.Listen(ctx, func(pod pod_images.PodImages, removed bool) error {
+		if removed {
+			exporter.OutdatedMetric.Delete(prometheus.Labels{
+				"namespace": pod.Namespace,
+				"pod":       pod.Name,
+				"type":      "major",
+			})
+			exporter.OutdatedMetric.Delete(prometheus.Labels{
+				"namespace": pod.Namespace,
+				"pod":       pod.Name,
+				"type":      "minor",
+			})
+			exporter.OutdatedMetric.Delete(prometheus.Labels{
+				"namespace": pod.Namespace,
+				"pod":       pod.Name,
+				"type":      "patch",
+			})
+			return nil
+		}
+
+		for container, image := range pod.Images {
 			currentVersion, err := e.tagLister.GetTagOfImage(image)
 			if err != nil {
 				continue
@@ -41,20 +60,23 @@ func (e *Evaluator) Run(ctx context.Context) error {
 				continue
 			}
 
-			log.Printf("pod %q is major=%d minor=%d patch=%d behind", pod.Name, major, minor, patch)
+			log.Printf("pod %q container %q is major=%d minor=%d patch=%d behind", pod.Name, container, major, minor, patch)
 			exporter.OutdatedMetric.With(prometheus.Labels{
 				"namespace": pod.Namespace,
 				"pod":       pod.Name,
+				"container": container,
 				"type":      "major",
 			}).Set(float64(major))
 			exporter.OutdatedMetric.With(prometheus.Labels{
 				"namespace": pod.Namespace,
 				"pod":       pod.Name,
+				"container": container,
 				"type":      "minor",
 			}).Set(float64(minor))
 			exporter.OutdatedMetric.With(prometheus.Labels{
 				"namespace": pod.Namespace,
 				"pod":       pod.Name,
+				"container": container,
 				"type":      "patch",
 			}).Set(float64(patch))
 		}
