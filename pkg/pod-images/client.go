@@ -139,6 +139,7 @@ func (p *PodClient) processItem(key string, cb Callback) (bool, error) {
 	}
 
 	if !exists {
+		log.Printf("pod deleted %s", key)
 		parts := strings.SplitN(key, "/", 2)
 		if len(parts) != 2 {
 			return false, fmt.Errorf("unexpected key format: %s", key)
