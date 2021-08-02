@@ -6,6 +6,14 @@ import (
 	"strings"
 )
 
+type PinMode int
+
+const (
+	PIN_NONE PinMode = iota
+	PIN_MAJOR
+	PIN_MINOR
+)
+
 type Checker struct {
 }
 
@@ -13,7 +21,7 @@ func NewChecker() (*Checker, error) {
 	return &Checker{}, nil
 }
 
-func (c *Checker) GetDifference(current string, available []string) (major, minor, patch int64, err error) {
+func (c *Checker) GetDifference(current string, available []string, pinMode PinMode) (major, minor, patch int64, err error) {
 	currentParsed, err := version.NewSemver(current)
 	if err != nil {
 		return
@@ -37,6 +45,16 @@ func (c *Checker) GetDifference(current string, available []string) (major, mino
 		}
 		// Skip all older version
 		if parsedVersion.LessThanOrEqual(currentParsed) {
+			continue
+		}
+
+		// Filter all major versions that are not equal to the current major version
+		if pinMode == PIN_MAJOR && parsedVersion.Segments()[0] != currentParsed.Segments()[0] {
+			continue
+		}
+
+		// Filter all minor and major version that don't match the current version
+		if pinMode == PIN_MINOR && (parsedVersion.Segments()[0] != currentParsed.Segments()[0] || parsedVersion.Segments()[1] != currentParsed.Segments()[1]) {
 			continue
 		}
 

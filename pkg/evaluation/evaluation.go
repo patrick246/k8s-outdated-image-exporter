@@ -55,6 +55,16 @@ func (e *Evaluator) Run(ctx context.Context) error {
 			return nil
 		}
 
+		var pinMode version.PinMode
+		switch pod.Annotations["outdated-images.patrick246.de/pin-mode"] {
+		case "major":
+			pinMode = version.PIN_MAJOR
+		case "minor":
+			pinMode = version.PIN_MINOR
+		default:
+			pinMode = version.PIN_NONE
+		}
+
 		var containers []string
 		for container, image := range pod.Images {
 			currentVersion, err := e.tagLister.GetTagOfImage(image)
@@ -66,7 +76,7 @@ func (e *Evaluator) Run(ctx context.Context) error {
 			if err != nil {
 				continue
 			}
-			major, minor, patch, err := e.versionChecker.GetDifference(currentVersion, imageTags)
+			major, minor, patch, err := e.versionChecker.GetDifference(currentVersion, imageTags, pinMode)
 			if err != nil {
 				continue
 			}

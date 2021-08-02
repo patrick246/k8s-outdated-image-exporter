@@ -26,9 +26,10 @@ type ConnectionConfig struct {
 }
 
 type PodImages struct {
-	Namespace string
-	Name      string
-	Images    map[string]string
+	Namespace   string
+	Name        string
+	Images      map[string]string
+	Annotations map[string]string
 }
 
 type Callback func(images PodImages, removed bool) error
@@ -162,9 +163,10 @@ func (p *PodClient) processItem(key string, cb Callback) (bool, error) {
 	}
 
 	err = cb(PodImages{
-		Namespace: pod.GetNamespace(),
-		Name:      pod.GetName(),
-		Images:    images,
+		Namespace:   pod.GetNamespace(),
+		Name:        pod.GetName(),
+		Images:      images,
+		Annotations: pod.GetAnnotations(),
 	}, false)
 	return true, err
 }
