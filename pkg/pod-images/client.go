@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	coreV1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -26,10 +27,11 @@ type ConnectionConfig struct {
 }
 
 type PodImages struct {
-	Namespace   string
-	Name        string
-	Images      map[string]string
-	Annotations map[string]string
+	Namespace        string
+	Name             string
+	Images           map[string]string
+	Annotations      map[string]string
+	ImagePullSecrets []string
 }
 
 type Callback func(images PodImages, removed bool) error
@@ -158,15 +160,35 @@ func (p *PodClient) processItem(key string, cb Callback) (bool, error) {
 	}
 
 	images := map[string]string{}
+	var imagePullSecrets []string
+	for _, imagePullSecret := range pod.Spec.ImagePullSecrets {
+		secret, err := p.clientset.CoreV1().Secrets(pod.GetNamespace()).Get(context.Background(), imagePullSecret.Name, metav1.GetOptions{})
+		if err != nil {
+			return false, err
+		}
+		var decoded []byte
+		switch secret.Type {
+		case coreV1.SecretTypeDockercfg:
+			decoded, ok = secret.Data[coreV1.DockerConfigKey]
+		case coreV1.SecretTypeDockerConfigJson:
+			decoded, ok = secret.Data[coreV1.DockerConfigJsonKey]
+		default:
+			log.Printf("unknown secret type %s for secret %s%S", secret.Type, secret.GetNamespace(), secret.GetName())
+			continue
+		}
+		imagePullSecrets = append(imagePullSecrets, string(decoded))
+	}
+
 	for _, container := range pod.Spec.Containers {
 		images[container.Name] = container.Image
 	}
 
 	err = cb(PodImages{
-		Namespace:   pod.GetNamespace(),
-		Name:        pod.GetName(),
-		Images:      images,
-		Annotations: pod.GetAnnotations(),
+		Namespace:        pod.GetNamespace(),
+		Name:             pod.GetName(),
+		Images:           images,
+		Annotations:      pod.GetAnnotations(),
+		ImagePullSecrets: imagePullSecrets,
 	}, false)
 	return true, err
 }

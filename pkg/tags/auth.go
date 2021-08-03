@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"github.com/google/go-containerregistry/pkg/authn"
 	"os"
+	"strings"
 )
 
 type DockerConfigKeychain struct {
@@ -16,6 +17,18 @@ func (d DockerConfigKeychain) Resolve(resource authn.Resource) (authn.Authentica
 		return authn.Anonymous, nil
 	}
 	return authn.FromConfig(authConfig), nil
+}
+
+func ReadRegistryCredentialsFromString(cred string) (*DockerConfigKeychain, error) {
+	var config struct {
+		AuthConfig map[string]authn.AuthConfig `json:"auths"`
+	}
+	err := json.NewDecoder(strings.NewReader(cred)).Decode(&config)
+	if err != nil {
+		return &DockerConfigKeychain{}, err
+	}
+
+	return &DockerConfigKeychain{authConfigs: config.AuthConfig}, nil
 }
 
 func ReadRegistryCredentialsFromFile(path string) (*DockerConfigKeychain, error) {

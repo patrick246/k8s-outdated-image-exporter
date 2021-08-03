@@ -72,10 +72,17 @@ func (e *Evaluator) Run(ctx context.Context) error {
 				continue
 			}
 
-			imageTags, err := e.tagLister.ListTags(image)
+			var imageTags []string
+			if len(pod.ImagePullSecrets) > 0 {
+				imageTags, err = e.tagLister.ListTagsWithCreds(image, pod.ImagePullSecrets)
+
+			} else {
+				imageTags, err = e.tagLister.ListTags(image)
+			}
 			if err != nil {
 				continue
 			}
+
 			major, minor, patch, err := e.versionChecker.GetDifference(currentVersion, imageTags, pinMode)
 			if err != nil {
 				continue
