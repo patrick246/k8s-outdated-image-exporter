@@ -65,6 +65,8 @@ func (e *Evaluator) Run(ctx context.Context) error {
 			pinMode = version.PIN_NONE
 		}
 
+		imageKeychain := tags.RegistryCredentialsFromSecrets(pod.PullSecrets)
+
 		var containers []string
 		for container, image := range pod.Images {
 			currentVersion, err := e.tagLister.GetTagOfImage(image)
@@ -72,7 +74,7 @@ func (e *Evaluator) Run(ctx context.Context) error {
 				continue
 			}
 
-			imageTags, err := e.tagLister.ListTags(image)
+			imageTags, err := e.tagLister.ListTags(image, imageKeychain)
 			if err != nil {
 				continue
 			}

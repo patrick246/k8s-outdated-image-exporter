@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	coreV1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -30,6 +31,7 @@ type PodImages struct {
 	Name        string
 	Images      map[string]string
 	Annotations map[string]string
+	PullSecrets []*coreV1.Secret
 }
 
 type Callback func(images PodImages, removed bool) error
@@ -162,11 +164,39 @@ func (p *PodClient) processItem(key string, cb Callback) (bool, error) {
 		images[container.Name] = container.Image
 	}
 
+	// Get the secret associated with the serviceaccount first, so pod image pull secrets override service account pull secrets
+	var imagePullSecrets []*coreV1.Secret
+	if podServiceAccountName := pod.Spec.ServiceAccountName; podServiceAccountName != "" {
+		podServiceAccount, err := p.clientset.CoreV1().ServiceAccounts(pod.Namespace).Get(context.Background(), pod.Spec.ServiceAccountName, metav1.GetOptions{})
+		if err == nil {
+			for _, imagePullSecretRef := range podServiceAccount.ImagePullSecrets {
+				secret, err := p.clientset.CoreV1().Secrets(pod.Namespace).Get(context.Background(), imagePullSecretRef.Name, metav1.GetOptions{})
+				if err != nil {
+					log.Printf("error while getting serviceaccount imagePullSecret: %s/%s: %s. skipping secret, this might not work.", pod.Namespace, imagePullSecretRef.Name, err.Error())
+					continue
+				}
+				imagePullSecrets = append(imagePullSecrets, secret)
+			}
+		} else {
+			log.Printf("error getting serviceaccount %s from pod %s/%s. skipping secrets, this might not work", podServiceAccountName, pod.Namespace, pod.Name)
+		}
+	}
+
+	for _, imagePullSecretRef := range pod.Spec.ImagePullSecrets {
+		secret, err := p.clientset.CoreV1().Secrets(pod.Namespace).Get(context.Background(), imagePullSecretRef.Name, metav1.GetOptions{})
+		if err != nil {
+			log.Printf("error while getting pod imagePullSecret: %s/%s: %s. skipping secret, this might not work.", pod.Namespace, imagePullSecretRef.Name, err.Error())
+			continue
+		}
+		imagePullSecrets = append(imagePullSecrets, secret)
+	}
+
 	err = cb(PodImages{
 		Namespace:   pod.GetNamespace(),
 		Name:        pod.GetName(),
 		Images:      images,
 		Annotations: pod.GetAnnotations(),
+		PullSecrets: imagePullSecrets,
 	}, false)
 	return true, err
 }
