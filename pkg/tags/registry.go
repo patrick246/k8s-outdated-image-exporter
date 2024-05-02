@@ -1,6 +1,8 @@
 package tags
 
 import (
+	"context"
+
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 )
@@ -15,7 +17,7 @@ func NewTagLister(keychain *DockerConfigKeychain) (*TagLister, error) {
 	}, nil
 }
 
-func (t *TagLister) ListTags(image string, keychain *DockerConfigKeychain) ([]string, error) {
+func (t *TagLister) ListTags(ctx context.Context, image string, keychain *DockerConfigKeychain) ([]string, error) {
 	ref, err := name.ParseReference(image)
 	if err != nil {
 		return nil, err
@@ -23,7 +25,7 @@ func (t *TagLister) ListTags(image string, keychain *DockerConfigKeychain) ([]st
 
 	mergedKeychain := MergeKeychains([]*DockerConfigKeychain{t.keychain, keychain}...)
 
-	tags, err := remote.List(ref.Context(), remote.WithAuthFromKeychain(mergedKeychain))
+	tags, err := remote.List(ref.Context(), remote.WithAuthFromKeychain(mergedKeychain), remote.WithContext(ctx))
 	if err != nil {
 		return nil, err
 	}
