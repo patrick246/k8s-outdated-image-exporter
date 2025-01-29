@@ -71,7 +71,7 @@ func NewContainerClient(config ConnectionConfig, logger *slog.Logger) (*Containe
 	informer := factory.Core().V1().Pods().Informer()
 
 	queue := workqueue.NewRateLimitingQueue(workqueue.NewItemExponentialFailureRateLimiter(time.Second, time.Minute))
-	informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+	_, err = informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			key, err := cache.MetaNamespaceKeyFunc(obj)
 			if err == nil {
@@ -85,6 +85,9 @@ func NewContainerClient(config ConnectionConfig, logger *slog.Logger) (*Containe
 			}
 		},
 	})
+	if err != nil {
+		return nil, err
+	}
 
 	return &ContainerClient{
 		Config:         config,
@@ -162,6 +165,7 @@ func (c *ContainerClient) processWorkqueue(key string) []clients.ContainerImage 
 
 	for _, container := range pod.Spec.Containers {
 		images[container.Name] = container.Image
+		c.containerCache[key] = append(c.containerCache[key], container.Name)
 	}
 
 	var imagePullSecrets []*coreV1.Secret
